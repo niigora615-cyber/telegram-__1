@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ru"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Мини — Идеальный одностраничный сайт (index.html)</title>
+  <meta name="description" content="Single-file responsive demo: landing, chat-панель, редактор кода и экспорт. Сохрани как index.html и открой в браузере.">
+  <style>
+    /* ====== Root / Base ====== */
+    :root{
+      --bg:#0f1724; --panel:#0b1220; --card:#071028; --muted:#9aa4b2; --accent:#2a9df4; --glass: rgba(255,255,255,0.04);
+      --radius:16px; --max-w:1200px; --gap:18px; --fw: 400;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;}
+    body{font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin:0; background:linear-gradient(180deg,#021627 0%, #071428 60%); color:#e6eef8; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+    a{color:var(--accent); text-decoration:none}
+    .container{max-width:var(--max-w); margin:28px auto; padding:20px;}
+
+    /* ===== Header ===== */
+    header{display:flex;align-items:center;gap:16px;margin-bottom:22px}
+    .logo{display:flex;align-items:center;gap:12px}
+    .logo svg{width:44px;height:44px}
+    h1{font-size:18px;margin:0}
+    .sub{color:var(--muted);font-size:13px}
+
+    /* ===== Layout ===== */
+    .grid{display:grid;grid-template-columns:360px 1fr; gap:var(--gap)}
+    @media (max-width:900px){.grid{grid-template-columns:1fr;}}
+
+    /* ===== Sidebar ===== */
+    .sidebar{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:18px; border-radius:12px; min-height:520px}
+    .profile{display:flex;gap:12px;align-items:center}
+    .avatar{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#2a9df4,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;color:white}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:var(--glass);border:1px solid rgba(255,255,255,0.03);cursor:pointer}
+    .muted{color:var(--muted);font-size:13px}
+    .side-list{margin-top:16px}
+    .side-item{display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:10px;cursor:pointer}
+    .side-item:hover{background:rgba(255,255,255,0.02)}
+
+    /* ===== Main panel ===== */
+    .panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); border-radius:12px;padding:16px; min-height:520px}
+    .top-actions{display:flex;justify-content:space-between;gap:12px;align-items:center}
+    .search{flex:1;margin-right:12px}
+    .search input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+
+    /* Chat area */
+    .chat{height:360px;overflow:auto;padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00)); border:1px solid rgba(255,255,255,0.02); margin-top:12px}
+    .msg{display:flex;gap:12px;padding:10px;border-radius:12px;margin-bottom:8px}
+    .msg.user{justify-content:flex-end}
+    .bubble{max-width:78%;padding:12px;border-radius:12px;background:linear-gradient(180deg,#082032,#052131);border:1px solid rgba(255,255,255,0.02)}
+    .bubble.user{background:linear-gradient(180deg,#0b2540,#073051);border:1px solid rgba(255,255,255,0.04)}
+    .meta{font-size:12px;color:var(--muted);margin-top:6px}
+
+    /* Composer */
+    .composer{display:flex;gap:8px;margin-top:12px}
+    .composer textarea{flex:1;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);min-height:56px;background:transparent;color:inherit;resize:vertical}
+    .actions{display:flex;gap:8px}
+
+    /* Editor / preview */
+    .editor-wrap{margin-top:14px;display:grid;grid-template-columns:1fr 360px;gap:12px}
+    @media (max-width:1100px){.editor-wrap{grid-template-columns:1fr}}
+    .editor, .preview{background:var(--card);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.02)}
+    pre[contenteditable]{outline:none;white-space:pre-wrap;word-wrap:break-word;min-height:200px;padding:10px;border-radius:8px;background:linear-gradient(180deg,#021323,#012033)}
+    .preview iframe{width:100%;height:300px;border-radius:8px;border:0}
+
+    /* Footer tools */
+    .tools{display:flex;gap:8px;align-items:center;margin-top:12px}
+    .pill{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,0.03);background:transparent;font-size:13px}
+
+    footer{color:var(--muted);font-size:13px;margin-top:18px;text-align:center}
+
+    /* small niceties */
+    .kbd{background:rgba(255,255,255,0.04);padding:4px 8px;border-radius:6px;font-size:12px}
+    .hidden{display:none}
+
+    /* scrollbars */
+    .chat::-webkit-scrollbar{height:8px;width:8px}
+    .chat::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.03);border-radius:10px}
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="url(#g)"></rect><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#2a9df4"></stop><stop offset="1" stop-color="#8b5cf6"></stop></linearGradient></defs></svg>
+        <div>
+          <h1>Mini One-File Site — index.html</h1>
+          <div class="sub">Landing · Chat demo · Code editor · Экспорт</div>
+        </div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <div class="muted">Тема</div>
+        <button class="btn" id="themeToggle">Switch</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <aside class="sidebar">
+        <div class="profile">
+          <div class="avatar">AI</div>
+          <div>
+            <div style="font-weight:600">Мини-Ассистент</div>
+            <div class="muted">Всегда готов помочь — нажми «Начать»</div>
+          </div>
+        </div>
+
+        <div class="side-list">
+          <div class="side-item" id="newConv"><div>Новый чат</div><div class="kbd">Ctrl+K</div></div>
+          <div class="side-item" id="loadExample"><div>Загрузить пример</div><div class="muted">код, ответ</div></div>
+          <div class="side-item" id="downloadPage"><div>Скачать index.html</div><div class="muted">Export</div></div>
+        </div>
+
+        <div style="margin-top:18px">
+          <div style="font-weight:600;margin-bottom:8px">Фичи</div>
+          <ul style="margin:0;padding-left:18px;color:var(--muted)">
+            <li>Одностраничный — HTML / CSS / JS в одном файле</li>
+            <li>Интерактивный чат и composer</li>
+            <li>Редактор кода (копировать/скачать)</li>
+            <li>Экспорт текущей страницы</li>
+          </ul>
+        </div>
+
+        <div style="position:relative;margin-top:18px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn" id="premiumBtn">Премиум</button>
+            <div class="muted">подписка (демо)</div>
+          </div>
+        </div>
+
+      </aside>
+
+      <section class="panel">
+        <div class="top-actions">
+          <div style="display:flex;gap:10px;align-items:center;flex:1">
+            <div class="search"><input id="search" placeholder="Поиск по чату или подсказкам..."></div>
+            <div><button class="btn" id="startBtn">Начать</button></div>
+          </div>
+          <div class="muted">Готово</div>
+        </div>
+
+        <div class="chat" id="chat">
+          <!-- сообщения будут тут -->
+        <div class="msg bot"><div class="bubble ">Привет! Я мини-ассистент. Могу показать пример сайта, помочь с кодом или экспортировать страницу. Попробуй написать сообщение и нажать «Отправить».</div></div></div>
+
+        <div class="composer">
+          <textarea id="input" placeholder="Напиши сообщение... (Shift+Enter — новая строка)"></textarea>
+          <div class="actions">
+            <button class="btn" id="send">Отправить</button>
+            <button class="btn" id="example">Пример</button>
+          </div>
+        </div>
+
+        <div class="editor-wrap">
+          <div class="editor">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-weight:600">Редактор HTML/CSS/JS</div>
+              <div style="display:flex;gap:8px">
+                <button class="pill" id="copyCode">Копировать</button>
+                <button class="pill" id="downloadCode">Скачать</button>
+              </div>
+            </div>
+            <pre id="code" contenteditable="" spellcheck="false"><!--
+Сюда поместите HTML/CSS/JS. Это демонстрационный код.
+Изменяй прямо в браузере и смотри результат в предпросмотре.
+-->
+&lt;!-- Пример: маленький виджет --&gt;
+&lt;div class="widget"&gt;
+  &lt;h3&gt;Hello from your single file&lt;/h3&gt;
+  &lt;p&gt;Редактируй этот код и экспортируй страницу.&lt;/p&gt;
+&lt;/div&gt;
+</pre>
+          </div>
+
+          <div class="preview">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-weight:600">Предпросмотр</div>
+              <div class="muted">живое</div>
+            </div>
+            <iframe id="previewFrame" sandbox="allow-same-origin"></iframe>
+          </div>
+        </div>
+
+        <div class="tools">
+          <button class="pill" id="clearChat">Очистить чат</button>
+          <button class="pill" id="exportPage">Экспорт</button>
+          <div style="margin-left:auto" class="muted">Подсказка: Ctrl+Enter — отправить</div>
+        </div>
+
+        <footer>© Мини-сайт — Сохраните как <strong>index.html</strong> и откройте в браузере.</footer>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // ===== Small helper utils =====
+    const $ = id => document.getElementById(id);
+    const chat = $('chat');
+    const input = $('input');
+    const preview = $('previewFrame');
+    const codeEl = $('code');
+
+    // Initial messages
+    function pushMessage(text, who='bot'){
+      const div = document.createElement('div');
+      div.className = 'msg ' + (who === 'user' ? 'user' : 'bot');
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble ' + (who === 'user' ? 'user' : '');
+      bubble.innerHTML = text.replace(/\n/g, '<br>');
+      div.appendChild(bubble);
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    // demo startup
+    pushMessage('Привет! Я мини-ассистент. Могу показать пример сайта, помочь с кодом или экспортировать страницу. Попробуй написать сообщение и нажать «Отправить».');
+
+    // Send handler (fake assistant)
+    function handleSend(){
+      const v = input.value.trim();
+      if(!v) return;
+      pushMessage(v, 'user');
+      input.value = '';
+      // fake processing
+      pushMessage('<i>Пишу ответ...</i>');
+      setTimeout(()=>{
+        const reply = generateReply(v);
+        // replace last "пис�" with real
+        const last = chat.querySelector('.msg.bot:last-child .bubble');
+        if(last) last.innerHTML = reply;
+        chat.scrollTop = chat.scrollHeight;
+      }, 700 + Math.random()*700);
+    }
+
+    function generateReply(text){
+      // Very simple heuristic replies for demo
+      const t = text.toLowerCase();
+      if(t.includes('код') || t.includes('html') || t.includes('css')){
+        return 'Вот простой пример кода — скопируй его в редактор и смотри в предпросмотре.' +
+          '<pre style="background:rgba(0,0,0,0.2);padding:8px;border-radius:6px">&lt;div&gt;Hello&lt;/div&gt;</pre>';
+      }
+      if(t.includes('привет') || t.includes('здравствуй')) return 'Привет! Чем могу помочь? Могу сгенерировать пример, объяснить код или экспортировать страницу.';
+      if(t.includes('скач') || t.includes('экспорт')) return 'Нажми кнопку «Скачать index.html» в сайдбаре — она соберёт текущую страницу в один HTML-файл.';
+      return 'Интересный вопрос — попробуй уточнить. Например: "Покажи пример формы" или "Сгенерируй CSS для карточки".';
+    }
+
+    // Bind send
+    $('send').addEventListener('click', handleSend);
+    input.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' && e.ctrlKey){ e.preventDefault(); handleSend(); }
+      if(e.key === 'Enter' && !e.shiftKey && e.ctrlKey===false && e.metaKey===false && e.altKey===false){ /* ignore single Enter to allow newline */ }
+    });
+
+    // Start button: load friendly prompt
+    $('startBtn').addEventListener('click', ()=>{
+      pushMessage('Давайте начнём! Напишите, что хотите — пример, объяснение кода или задачу.');
+    });
+
+    // Example loader
+    $('loadExample').addEventListener('click', ()=>{
+      loadExampleCode();
+      pushMessage('Пример кода загружен в редактор. Нажмите «Предпросмотр» чтобы увидеть.');
+    });
+    function loadExampleCode(){
+      const sample = `<!doctype html>\n<html><body>\n  <style>body{font-family:sans-serif;background:linear-gradient(135deg,#0b2540,#021427);color:white;padding:20px}\n  .card{padding:16px;border-radius:8px;background:rgba(255,255,255,0.03)}\n  </style>\n  <div class="card"><h3>Пример виджета</h3><p>Это демонстрационный код в одностраничнике.</p></div>\n</body></html>`;
+      codeEl.textContent = sample;
+      updatePreview();
+    }
+
+    // Preview update: write iframe content
+    function updatePreview(){
+      const doc = preview.contentWindow.document;
+      doc.open();
+      doc.write(codeEl.textContent);
+      doc.close();
+    }
+    codeEl.addEventListener('input', ()=>{ updatePreview(); });
+
+    // Initial preview
+    updatePreview();
+
+    // Copy & download code
+    $('copyCode').addEventListener('click', async ()=>{
+      try{
+        await navigator.clipboard.writeText(codeEl.textContent);
+        alert('Код скопирован в буфер обмена');
+      }catch(err){ alert('Не удалось скопировать: ' + err); }
+    });
+
+    $('downloadCode').addEventListener('click', ()=>{
+      downloadFile('snippet.html', codeEl.textContent);
+    });
+
+    // Download the whole page (current document)
+    function downloadFile(name, data){
+      const blob = new Blob([data], {type:'text/html'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    $('downloadPage').addEventListener('click', ()=>{
+      // Export the current document as a single HTML file
+      const html = '<!doctype html>\n' + document.documentElement.outerHTML;
+      downloadFile('index.html', html);
+    });
+    $('exportPage').addEventListener('click', ()=>{ $('downloadPage').click(); });
+
+    // Clear chat
+    $('clearChat').addEventListener('click', ()=>{ chat.innerHTML=''; pushMessage('Чат очищен. Напишите сообщение чтобы начать.'); });
+
+    // Premium button (demo behavior)
+    $('premiumBtn').addEventListener('click', ()=>{ alert('Премиум — демонстрация. Здесь можно подключить платёжную интеграцию.'); });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e)=>{
+      if(e.ctrlKey && e.key.toLowerCase() === 'k'){ e.preventDefault(); input.focus(); }
+      if(e.ctrlKey && e.key === 'Enter'){ handleSend(); }
+    });
+
+    // Theme toggle (simple)
+    $('themeToggle').addEventListener('click', ()=>{
+      if(document.documentElement.style.getPropertyValue('--bg') === ''){
+        document.documentElement.style.setProperty('--bg', '#f6f8fb');
+      }
+      // simple visual toggle: invert colors
+      document.body.classList.toggle('light');
+      if(document.body.classList.contains('light')){
+        document.body.style.background = 'linear-gradient(180deg,#f5f7fb,#eef3fb)';
+        document.body.style.color = '#042034';
+      }else{
+        document.body.style.background = 'linear-gradient(180deg,#021627,#071428)';
+        document.body.style.color = '#e6eef8';
+      }
+    });
+
+    // Copy full page button
+    document.getElementById('newConv').addEventListener('click', ()=>{ chat.innerHTML=''; pushMessage('Новый чат. Чем могу помочь?'); });
+
+    // Paste from example button
+    $('example').addEventListener('click', ()=>{ codeEl.textContent = `&lt;div style="padding:12px;background:#021427;border-radius:8px"&gt;\n  &lt;h3&gt;Example Widget&lt;/h3&gt;\n  &lt;p&gt;This is editable sample code inside the single-file site.&lt;/p&gt;\n&lt;/div&gt;`; updatePreview(); pushMessage('Пример кода загружен.'); });
+
+    // Ensure preview updates initially
+    setTimeout(updatePreview, 200);
+
+    // Safety: if user wants to download page multiple times, revoke old URLs handled inside function
+
+  </script>
+
+</body></html>

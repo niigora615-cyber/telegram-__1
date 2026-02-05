@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mini Telegram — Smart Chat (Single file)</title>
+
+<!-- Optional Firebase (compat) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+:root{--bg:#0b1220;--panel:#0f1724;--muted:#9aa4b2;--accent:#2a9df4;--bubble-me:#2b6cb0;--bubble-other:#1f2937}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#071028 0%, #071729 100%);color:#e6eef6;min-height:100vh;display:flex;align-items:stretch}
+.app{width:100%;max-width:1200px;margin:20px auto;display:grid;grid-template-columns:300px 1fr;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+.sidebar{background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;padding:8px 4px}
+.profile-short{display:flex;align-items:center;gap:8px;padding:8px;border-radius:10px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent)}
+.profile-short img{width:44px;height:44px;border-radius:50%;object-fit:cover}
+.btn{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:white;cursor:pointer}
+.small-btn{padding:6px 8px;font-size:13px}
+.chats-list{overflow:auto;padding-right:6px}
+.chat-item{display:flex;gap:10px;align-items:center;padding:8px;border-radius:8px;cursor:pointer}
+.chat-item:hover{background:rgba(255,255,255,0.02)}
+.chat-item.active{background:linear-gradient(90deg, rgba(47,122,255,0.12), rgba(122,47,255,0.04))}
+.avatar{width:44px;height:44px;border-radius:50%;background:#253040;display:inline-block;position:relative;overflow:hidden}
+.msg-area{flex:1;padding:16px;overflow:auto;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent)}
+.msg-row{margin-bottom:12px;display:flex;align-items:flex-end;gap:8px;max-width:76%}
+.msg-row.me{margin-left:auto;flex-direction:row-reverse}
+.bubble{padding:10px 12px;border-radius:14px;background:var(--bubble-other);box-shadow:0 2px 6px rgba(2,6,23,0.6);color:#e6eef6}
+.bubble.me{background:linear-gradient(180deg,var(--bubble-me), #224e85);color:#fff}
+.msg-time{font-size:11px;color:var(--muted);margin-top:6px}
+.composer{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(255,255,255,0.03);align-items:center;background:var(--panel)}
+.composer input[type="text"]{flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+.composer .circle{width:40px;height:40px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.02);cursor:pointer}
+.emoji-row{display:flex;gap:8px;padding:6px;flex-wrap:wrap}
+.emoji{cursor:pointer;font-size:20px;padding:6px;border-radius:6px}
+.modal{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:60}
+.modal .card{background:var(--panel);padding:16px;border-radius:10px;width:420px}
+.inline-note{font-size:12px;color:var(--muted)}
+@media(max-width:860px){.app{grid-template-columns: 1fr}.sidebar{display:none}}
+.badge-seen{font-size:12px;color:var(--muted);margin-left:6px}
+.smart-mode-indicator{font-size:12px;color:#a7f3d0;margin-left:8px}
+</style>
+</head>
+<body>
+
+<!-- SPLASH / AUTH -->
+<div id="splash" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#071028cc,#071729cc);z-index:50">
+  <div style="width:460px;background:var(--panel);padding:20px;border-radius:12px;text-align:center">
+    <h2 style="margin:0 0 8px">Mini Telegram — Smart Chat</h2>
+    <p style="color:var(--muted);margin:0 0 12px">Войти через Google (если включён в firebase) или локально как гость</p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px">
+      <button id="googleSignInBtn" class="btn">Войти через Google</button>
+      <button id="guestBtn" class="btn small-btn">Гость</button>
+    </div>
+    <input id="guestName" placeholder="Имя (если Гость)" style="width:100%;padding:10px;border-radius:8px;border:none;margin-bottom:8px">
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:8px">
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="premiumCheckbox"> Premium+</label>
+      <button id="openDemo" class="btn small-btn">Открыть demo</button>
+    </div>
+
+    <p style="color:var(--muted);font-size:12px;margin-top:10px">Smart Chat: локальный режим + опция OpenAI (вставь API key ниже в модале «Smart settings»)</p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
+      <button id="smartSettingsBtn" class="small-btn">Smart settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="root" style="display:none">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div style="width:40px;height:40px;border-radius:8px;background:linear-gradient(90deg,#2a9df4,#8b5cf6)"></div>
+      <div>
+        <h1 style="font-size:16px;margin:0">Mini Telegram</h1>
+        <div style="font-size:12px;color:var(--muted)">Smart Chat</div>
+      </div>
+    </div>
+
+    <div id="loggedProfile" class="profile-short" style="gap:12px">
+      <div class="avatar" id="myAvatar"><img src="" alt="" style="width:44px;height:44px"></div>
+      <div style="flex:1">
+        <div id="myName" style="font-weight:600"></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <div class="meta" id="myStatus" style="font-size:12px;color:var(--muted)">offline</div>
+          <div id="premiumTag" style="font-size:12px;color:#ffd166"></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="small-btn" id="editProfileBtn">Профиль</button>
+        <button class="small-btn" id="signOutBtn">Выйти</button>
+      </div>
+    </div>
+
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="small-btn" id="showChannelsBtn">Каналы</button>
+      <button class="small-btn" id="showBotsBtn">Боты</button>
+      <button class="small-btn" id="openSmartChatBtn">Умный</button> 
+   
+    </div>
+
+    <div style="margin-top:8px">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Чаты</div>
+      <div class="chats-list" id="chatsList" role="list"></div>
+    </div>
+
+    <div style="margin-top:auto">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Контакты</div>
+      <div id="contactsList" style="max-height:180px;overflow:auto"></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="title" id="chatTitle">🌍 Global</div>
+        <div class="meta" id="chatMeta">Общий чат</div>
+        <a style="background-color: blue;" href="dd.html">ии помошник </a>  
+         <a style="display: grid; gap: 20px; background-color: green;" href="https://niigora615-cyber.github.io/dior/">mini uzum</a>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="chatAvatar"></div>
+        <div class="smart-mode-indicator" id="smartModeIndicator" style="display:none">Smart: ON</div>
+      </div>
+    </div>
+
+    <div class="msg-area" id="messages"></div>
+
+    <div style="padding:6px 12px;background:var(--panel)">
+      <div class="emoji-row" id="emojiRow"></div>
+      <div class="composer">
+        <div class="circle" id="attachBtn">📎</div>
+        <input type="file" id="fileInput" style="display:none" accept="image/*">
+        <input type="text" id="messageInput" placeholder="Напишите сообщение...">
+        <div class="circle" id="sendBtn">➤</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- MODALS -->
+<div class="modal" id="profileModal"><div class="card"><h3>Профиль</h3><div style="display:flex;gap:10px;align-items:center;margin:10px 0"><div class="avatar" id="editAvatar"><img src=""></div><div style="flex:1"><input id="editName" placeholder="Имя" style="width:100%;padding:8px;border-radius:8px;border:none"><div style="margin-top:6px;display:flex;gap:6px"><input type="file" id="avatarFile"><button id="saveProfile" class="btn small-btn">Сохранить</button><button id="closeProfile" class="btn small-btn" style="background:#6b7280">Отмена</button></div></div></div></div></div>
+
+<div class="modal" id="smartSettingsModal"><div class="card">
+  <h3>Smart settings</h3>
+  <p class="inline-note">OpenAI (опционально): вставь свой ключ, чтобы использовать реальный ИИ. Лучше использовать сервер для безопасности.</p>
+  <label style="display:block;margin:6px 0">OpenAI API Key (optional): <input id="openaiKey" style="width:100%;padding:8px;border-radius:6px;border:none;background:#0b1228;color:#fff"></label>
+  <label style="display:block;margin:6px 0">Model: <input id="openaiModel" value="gpt-4o-mini" style="width:100%;padding:8px;border-radius:6px;border:none;background:#0b1228;color:#fff"></label>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+    <button id="saveSmartSettings" class="btn small-btn">Сохранить</button>
+    <button id="closeSmartSettings" class="btn small-btn" style="background:#6b7280">Отмена</button>
+  </div>
+</div></div>
+
+<!-- Basic channel & bot modals omitted for brevity (assume previous file includes them) -->
+<!-- For simplicity this file focuses on Smart Chat integration; if you want full channels/bots UI, merge pieces from earlier file. -->
+
+<script>
+                                                                         
+/* ========== CONFIG ========== */
+/* Optional: вставь firebaseConfig, если хочешь реальный online */
+const firebaseConfig = {
+  // apiKey: "...",
+  // authDomain: "...",
+  // databaseURL: "...",
+  // projectId: "...",                        
+  // storageBucket: "...",
+  // messagingSenderId: "...",                 
+  // appId: "..."
+};
+const useFirebase = !!firebaseConfig.apiKey;
+if(useFirebase){ firebase.initializeApp(firebaseConfig); var auth = firebase.auth(); var db = firebase.database(); } else console.warn("Firebase not configured — demo/local mode");
+
+/* Smart settings stored in localStorage:
+   - openaiKey: optional string (BE CAREFUL: exposing key in client is insecure)
+   - openaiModel: model name string
+*/
+const defaultSmart = { openaiKey: '', openaiModel: 'gpt-4o-mini', useOpenAI:false };
+
+/* ========== STATE ========== */
+let me = null; // {uid,name,avatar,premium}
+let currentChat = {type:'global',id:'global'}; // types: global, private, channel, smart
+const $ = id => document.getElementById(id);
+const uidKey = (a,b)=>[a,b].sort().join('_');
+const emojis = ['😀','😅','😂','😊','😍','😎','🤩','😭','👍','🔥','🎉','💯'];
+
+/* populate emoji picker */
+emojis.forEach(e=>{ const el=document.createElement('div'); el.className='emoji'; el.textContent=e; el.onclick=()=>{ $('messageInput').value += e; $('messageInput').focus(); }; $('emojiRow').appendChild(el); });
+
+/* UI bindings */
+$('openDemo').onclick = ()=>{ const name = $('guestName').value || ('Guest'+Math.floor(Math.random()*900+100)); const prem = $('premiumCheckbox').checked; startAsGuest(name,prem); };
+$('googleSignInBtn').onclick = async ()=>{ if(!useFirebase) return alert('Firebase not configured.'); const provider = new firebase.auth.GoogleAuthProvider(); try{ await auth.signInWithPopup(provider); }catch(e){ alert('Auth error: '+e.message); } };
+$('guestBtn').onclick = ()=> $('guestName').focus();
+
+$('attachBtn').onclick = ()=> $('fileInput').click();
+$('fileInput').onchange = ()=>{ const f=$('fileInput').files[0]; if(!f) return; const reader=new FileReader(); reader.onload=e=>{ sendMessage({type:'image', img:e.target.result}); $('fileInput').value=''; }; reader.readAsDataURL(f); };
+$('sendBtn').onclick = ()=> { const t = $('messageInput').value.trim(); if(!t) return; sendMessage({type:'text', text:t}); $('messageInput').value=''; };
+
+$('smartSettingsBtn').onclick = ()=> $('smartSettingsModal').style.display='flex';
+$('closeSmartSettings').onclick = ()=> $('smartSettingsModal').style.display='none';
+$('saveSmartSettings').onclick = ()=>{ const key = $('openaiKey').value.trim(); const model = $('openaiModel').value.trim() || 'gpt-4o-mini'; localStorage.setItem('smart_settings', JSON.stringify({openaiKey:key, openaiModel:model, useOpenAI: !!key})); $('smartSettingsModal').style.display='none'; loadSmartSettings(); };
+
+/* profile modal bindings */
+$('editProfileBtn').onclick = ()=>{ $('profileModal').style.display='flex'; $('editName').value = me.name || ''; $('editAvatar').querySelector('img').src = me.avatar || defaultAvatar(me.name); };
+$('closeProfile').onclick = ()=> $('profileModal').style.display='none';
+$('saveProfile').onclick = ()=>{ const newName = $('editName').value || me.name; const file = $('avatarFile').files[0]; if(file){ const r=new FileReader(); r.onload=e=>{ saveProfile(newName, e.target.result); $('profileModal').style.display='none'; }; r.readAsDataURL(file); } else { saveProfile(newName, me.avatar); $('profileModal').style.display='none'; } };
+
+/* open smart chat button */
+$('openSmartChatBtn').onclick = ()=> openSmartChat();
+
+/* ========== HELPERS ========== */
+function defaultAvatar(name){ return 'https://ui-avatars.com/api/?name='+encodeURIComponent(name)+'&background=2a9df4&color=fff&size=128'; }
+
+/* Smart settings */
+let SMART = defaultSmart;
+function loadSmartSettings(){ const s = JSON.parse(localStorage.getItem('smart_settings')||'{}'); SMART = Object.assign({}, defaultSmart, s); $('openaiKey').value = SMART.openaiKey || ''; $('openaiModel').value = SMART.openaiModel || defaultSmart.openaiModel; $('smartModeIndicator').style.display = (SMART.useOpenAI? 'inline-flex' : 'none'); }
+loadSmartSettings();
+
+/* ========== DEMO / AUTH START ========== */
+function startAsGuest(name, premium){ me = { uid: 'guest_'+Math.floor(Math.random()*900000), name, avatar: defaultAvatar(name), premium: !!premium }; $('splash').style.display='none'; $('root').style.display='grid'; renderMyProfile(); initLocalDemo(); startLocalRealtime(); }
+if(useFirebase){
+  auth.onAuthStateChanged(async userAuth => {
+    if(userAuth){
+      me = { uid:userAuth.uid, name:userAuth.displayName || ('User'+userAuth.uid.slice(0,6)), avatar:userAuth.photoURL || defaultAvatar(userAuth.displayName), premium:false };
+      await db.ref('profiles/'+me.uid).set({name:me.name, avatar:me.avatar, premium:!!me.premium});
+      $('splash').style.display='none'; $('root').style.display='grid';
+      renderMyProfile();
+      initFirebaseListeners();
+      setupPresence();
+    }
+  });
+}
+
+/* ========== RENDER / UI ========== */
+function renderMyProfile(){ if(!me) return; $('myName').textContent = me.name; $('myAvatar').querySelector('img').src = me.avatar; $('editAvatar').querySelector('img').src = me.avatar; $('myStatus').textContent = useFirebase ? 'online' : 'offline (demo)'; $('premiumTag').textContent = me.premium? '⭐ Premium+' : ''; }
+
+/* ========== LOCAL DEMO STORAGE INITIALIZATION ========= */
+function initLocalDemo(){
+  if(!localStorage.getItem('demo_profiles')) localStorage.setItem('demo_profiles', JSON.stringify({ [me.uid]:{name:me.name, avatar:me.avatar, premium:me.premium} }));
+  else { const p = JSON.parse(localStorage.getItem('demo_profiles')); p[me.uid] = {name:me.name, avatar:me.avatar, premium:me.premium}; localStorage.setItem('demo_profiles', JSON.stringify(p)); }
+  if(!localStorage.getItem('demo_global')) localStorage.setItem('demo_global', JSON.stringify([]));
+  if(!localStorage.getItem('demo_private')) localStorage.setItem('demo_private', JSON.stringify({}));
+  if(!localStorage.getItem('demo_smart')) localStorage.setItem('demo_smart', JSON.stringify([])); // messages in smart chat
+  // create basic contacts if missing
+  if(!localStorage.getItem('demo_profiles_populated')){
+    const p = JSON.parse(localStorage.getItem('demo_profiles')||'{}');
+    p['guest_1001'] = {name:'Alice', avatar: defaultAvatar('Alice'), premium:false};
+    p['guest_1002'] = {name:'Bob', avatar: defaultAvatar('Bob'), premium:false};
+    localStorage.setItem('demo_profiles', JSON.stringify(p));
+    localStorage.setItem('demo_profiles_populated', '1');
+  }
+  loadLocalContacts();
+  loadChatList();
+}
+
+/* ========== LOADERS for demo ======== */
+function loadLocalContacts(){
+  const p = JSON.parse(localStorage.getItem('demo_profiles')||'{}');
+  renderContacts(p);
+}
+function loadChatList(){
+  const cl = $('chatsList'); cl.innerHTML = '';
+  // global
+  const g = document.createElement('div'); g.className='chat-item'; g.dataset.room='global'; g.onclick=()=> openGlobal(); g.innerHTML=`<div style="width:44px;height:44px;border-radius:8px;background:linear-gradient(90deg,#2a9df4,#8b5cf6);display:flex;align-items:center;justify-content:center">🌍</div><div style="flex:1"><div style="font-weight:600">Global</div><div style="font-size:12px;color:var(--muted)">Общий чат</div></div>`; cl.appendChild(g);
+  // smart chat
+  const s = document.createElement('div'); s.className='chat-item'; s.dataset.room='smart'; s.onclick=()=> openSmartChat(); s.innerHTML=`<div style="width:44px;height:44px;border-radius:8px;background:#374151;display:flex;align-items:center;justify-content:center">🤖</div><div style="flex:1"><div style="font-weight:600">Smart Chat</div><div style="font-size:12px;color:var(--muted)">Умный помощник</div></div>`; cl.appendChild(s);
+  // private contacts
+  const p = JSON.parse(localStorage.getItem('demo_profiles')||'{}');
+  Object.keys(p).forEach(uid=>{ if(uid===me.uid) return; const u=p[uid]; const d=document.createElement('div'); d.className='chat-item'; d.onclick=()=> openPrivateChatWith(uid,u); d.innerHTML=`<div class="avatar"><img src="${u.avatar}" style="width:100%;height:100%"></div><div style="flex:1"><div style="font-weight:600">${u.name}</div><div style="font-size:12px;color:var(--muted)">Личный</div></div>`; cl.appendChild(d); });
+}
+
+/* render contacts list */
+function renderContacts(profilesObj){
+  const container = $('contactsList'); container.innerHTML=''; if(!profilesObj) return;
+  Object.keys(profilesObj).forEach(uid=>{ if(uid===me.uid) return; const p=profilesObj[uid]; const div=document.createElement('div'); div.className='chat-item'; div.onclick=()=> openPrivateChatWith(uid,p); div.innerHTML=`<div class="avatar"><img src="${p.avatar}" style="width:100%;height:100%"></div><div style="flex:1"><div style="font-weight:600">${p.name}</div><div style="font-size:12px;color:var(--muted)">${p.premium? 'Premium+' : ''}</div></div>`; container.appendChild(div); });
+}
+
+/* ========== OPEN CHAT VIEWS ========= */
+async function openGlobal(){ currentChat={type:'global', id:'global'}; $('chatTitle').textContent='🌍 Global'; $('chatMeta').textContent='Общий чат'; $('messages').innerHTML=''; loadGlobalMessages(); }
+function openPrivateChatWith(uid, profile){ const room = uidKey(uid, me.uid); currentChat={type:'private', id:room, peer:profile}; $('chatTitle').textContent='👤 '+profile.name; $('chatMeta').textContent='Личный'; $('messages').innerHTML=''; loadPrivateMessages(room); }
+function openSmartChat(){ currentChat={type:'smart', id:'smart'}; $('chatTitle').textContent='🤖 Smart Chat'; $('chatMeta').textContent='Умный помощник'; $('messages').innerHTML=''; $('smartModeIndicator').style.display = SMART.useOpenAI ? 'inline-flex' : 'none'; loadSmartMessages(); }
+
+/* ========== LOAD MESSAGES ======== */
+function loadGlobalMessages(){ $('messages').innerHTML=''; if(useFirebase){ db.ref('global/messages').limitToLast(200).once('value', snap=>{ const vals = snap.val()||{}; const arr = Object.keys(vals).map(k=>vals[k]); arr.sort((a,b)=> (a.ts||0)-(b.ts||0)).forEach(renderSingleMessage); }); } else { const arr = JSON.parse(localStorage.getItem('demo_global')||'[]'); arr.forEach(renderSingleMessage); } }
+function loadPrivateMessages(room){ $('messages').innerHTML=''; if(useFirebase){ db.ref('private/'+room+'/messages').limitToLast(200).once('value', snap=>{ const vals = snap.val()||{}; const arr = Object.keys(vals).map(k=>vals[k]); arr.sort((a,b)=> (a.ts||0)-(b.ts||0)).forEach(renderSingleMessage); }); } else { const all = JSON.parse(localStorage.getItem('demo_private')||'{}'); (all[room]||[]).forEach(renderSingleMessage); } }
+function loadSmartMessages(){ $('messages').innerHTML=''; if(useFirebase){ db.ref('smart/messages').limitToLast(200).once('value', snap=>{ const vals=snap.val()||{}; const arr=Object.keys(vals).map(k=>vals[k]); arr.sort((a,b)=> (a.ts||0)-(b.ts||0)).forEach(renderSingleMessage); }); } else { const arr = JSON.parse(localStorage.getItem('demo_smart')||'[]'); arr.forEach(renderSingleMessage); } }
+
+/* ========== SEND MESSAGE (handles smart integration) ========= */
+async function sendMessage(payload){
+  const msg = { id:'m_'+Date.now(), uid:me.uid, name:me.name, avatar:me.avatar, ts:Date.now(), type:payload.type||'text', text:payload.text||'', img:payload.img||'', seen:[], fromBot:false };
+  if(currentChat.type==='global'){ if(useFirebase) await db.ref('global/messages').push(msg); else { const arr=JSON.parse(localStorage.getItem('demo_global')||'[]'); arr.push(msg); localStorage.setItem('demo_global', JSON.stringify(arr)); renderSingleMessage(msg); } }
+  else if(currentChat.type==='private'){ const room = currentChat.id; if(useFirebase) await db.ref('private/'+room+'/messages').push(msg); else { const all = JSON.parse(localStorage.getItem('demo_private')||'{}'); all[room]=all[room]||[]; all[room].push(msg); localStorage.setItem('demo_private', JSON.stringify(all)); renderSingleMessage(msg); } }
+  else if(currentChat.type==='smart'){ // this is the smart chat — route to smart engine
+    if(useFirebase){ await db.ref('smart/messages').push(msg); } else { const arr = JSON.parse(localStorage.getItem('demo_smart')||'[]'); arr.push(msg); localStorage.setItem('demo_smart', JSON.stringify(arr)); renderSingleMessage(msg); }
+    // After pushing, trigger smart responder
+    if(SMART.useOpenAI && SMART.openaiKey){ // call OpenAI
+      triggerSmartOpenAIResponse(msg);
+    } else {
+      // local smart reply
+      const reply = localSmartResponder(msg);
+      if(reply){
+        // small delay for realism
+        setTimeout(()=>{ const botMsg = { id:'m_'+Date.now(), uid:'bot_smart', name:'SmartBot', avatar: defaultAvatar('SmartBot'), ts:Date.now(), type:'text', text:reply, seen:[], fromBot:true }; if(useFirebase) db.ref('smart/messages').push(botMsg); else { const arr = JSON.parse(localStorage.getItem('demo_smart')||'[]'); arr.push(botMsg); localStorage.setItem('demo_smart', JSON.stringify(arr)); renderSingleMessage(botMsg); } }, 700);
+      }
+    }
+  }
+}
+
+/* ========== SMART RESPONDERS ========== */
+
+/* Simple local rule-based responder for demo (fallback) */
+function localSmartResponder(message){
+  const text = (message.text||'').toLowerCase();
+  if(!text) return "Картинку получил — спасибо!";
+  // rules
+  if(text.includes('привет') || text.includes('здра')) return "Привет! Чем могу помочь?";
+  if(text.includes('как дела')) return "Всё ок, готов помогать тебе :)";
+  if(text.includes('помоги') || text.includes('как')) return "Опиши, пожалуйста, подробнее — я постараюсь помочь.";
+  if(text.includes('погода')) return "Я не умею смотреть погоду без интернета, но могу предложить структуру запроса.";
+  if(text.includes('шутк')) return "Почему программисты любят тёмную тему? Потому что светлая мешает видеть ошибки!";
+  // fallback small paraphrase/generation
+  const templates = [
+    "Интересно! Можешь сказать чуть подробнее?",
+    "Понял — расскажи ещё немного, чтобы дать лучший ответ.",
+    "Хмм… давай разберёмся: что именно тебя интересует?"
+  ];
+  return templates[Math.floor(Math.random()*templates.length)];
+}
+
+/* OpenAI integration (client-side) — WARNING: exposing key in client is insecure.
+   Only for quick testing. Prefer server-proxy in production. */
+async function triggerSmartOpenAIResponse(userMsg){
+  const settings = JSON.parse(localStorage.getItem('smart_settings')||'{}');
+  const key = settings.openaiKey;
+  const model = settings.openaiModel || 'gpt-4o-mini';
+  if(!key) return; // no key
+  // create a simple assistant conversation: user message -> assistant reply
+  const messages = [
+    { role: "system", content: "You are a helpful assistant for a chat app. Keep answers short and friendly." },
+    { role: "user", content: userMsg.text || "User sent a message." }
+  ];
+  try{
+    // call OpenAI Chat Completions
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer "+key
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+        max_tokens: 300,
+        temperature: 0.7
+      })
+    });
+    if(!resp.ok){
+      const txt = await resp.text();
+      console.error("OpenAI error", resp.status, txt);
+      return;
+    }
+    const data = await resp.json();
+    const reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) ? data.choices[0].message.content.trim() : "Извиняюсь, но сейчас не могу ответить.";
+    const botMsg = { id:'m_'+Date.now(), uid:'bot_ai', name:'AI Assistant', avatar: defaultAvatar('AI'), ts:Date.now(), type:'text', text: reply, seen:[], fromBot:true };
+    if(useFirebase) await db.ref('smart/messages').push(botMsg);
+    else { const arr = JSON.parse(localStorage.getItem('demo_smart')||'[]'); arr.push(botMsg); localStorage.setItem('demo_smart', JSON.stringify(arr)); renderSingleMessage(botMsg); }
+  } catch(err){ console.error("OpenAI request fail", err); }
+}
+
+/* ========== renderSingleMessage (with seen badge) ========== */
+function renderSingleMessage(m){
+  const messages = $('messages');
+  const row = document.createElement('div');
+  const mine = (m.uid === me.uid);
+  row.className = 'msg-row' + (mine ? ' me' : '');
+  const avatarWrap = document.createElement('div'); avatarWrap.className='msg-avatar';
+  const img = document.createElement('img'); img.src = m.avatar || defaultAvatar(m.name||m.uid); img.style.width='34px'; img.style.height='34px'; img.style.borderRadius='50%'; avatarWrap.appendChild(img);
+
+  const bubble = document.createElement('div'); bubble.className='bubble' + (mine ? ' me' : '');
+  if(m.type==='image'){ const im = document.createElement('img'); im.src = m.img; im.style.maxWidth='260px'; im.style.display='block'; bubble.appendChild(im); if(m.text) bubble.appendChild(document.createTextNode('\n'+m.text)); }
+  else bubble.textContent = (m.name ? m.name + ': ' : '') + (m.text || '');
+
+  const timeWrap = document.createElement('div'); timeWrap.style.display='flex'; timeWrap.style.flexDirection='column'; timeWrap.style.alignItems='flex-end';
+  const time = document.createElement('div'); time.className='msg-time'; time.textContent = new Date(m.ts||Date.now()).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  timeWrap.appendChild(time);
+
+  if(mine){
+    const seenCount = (m.seen && m.seen.filter(u=>u && u!==me.uid).length) || 0;
+    const seenEl = document.createElement('div'); seenEl.className='badge-seen'; seenEl.textContent = seenCount ? `👁 ${seenCount}` : '✓';
+    timeWrap.appendChild(seenEl);
+  }
+
+  row.appendChild(avatarWrap);
+  row.appendChild(bubble);
+  row.appendChild(timeWrap);
+  messages.appendChild(row);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+/* ========== DEMO polling / realtime for local mode ========= */
+function startLocalRealtime(){
+  setInterval(()=>{ const profiles = JSON.parse(localStorage.getItem('demo_profiles')||'{}'); renderContacts(profiles); loadChatList(); // reload messages for open chat
+    if(currentChat.type==='global'){ $('messages').innerHTML=''; JSON.parse(localStorage.getItem('demo_global')||'[]').forEach(renderSingleMessage); }
+    else if(currentChat.type==='private'){ const all=JSON.parse(localStorage.getItem('demo_private')||'{}'); (all[currentChat.id]||[]).forEach(renderSingleMessage); }
+    else if(currentChat.type==='smart'){ $('messages').innerHTML=''; JSON.parse(localStorage.getItem('demo_smart')||'[]').forEach(renderSingleMessage); } }, 900);
+}
+
+/* ========== FIREBASE: presence & listeners (if configured) ========= */
+function setupPresence(){
+  if(!useFirebase) return;
+  const statusRef = db.ref('status/'+me.uid);
+  const connectedRef = db.ref('.info/connected');
+  connectedRef.on('value', snap => {
+    if(snap.val() === true){
+      statusRef.set({online:true, lastSeen:firebase.database.ServerValue.TIMESTAMP});
+      statusRef.onDisconnect().set({online:false, lastSeen:firebase.database.ServerValue.TIMESTAMP});
+    } else {
+      statusRef.set({online:false, lastSeen:firebase.database.ServerValue.TIMESTAMP});
+    }
+  });
+}
+
+// ===== RENDER CONTACTS С УДАЛЕНИЕМ =====
+function renderContacts(profilesObj){
+  const container = $('contactsList'); 
+  container.innerHTML='';
+  if(!profilesObj) return;
+
+  Object.keys(profilesObj).forEach(uid=>{
+    if(uid===me.uid) return; 
+    const p = profilesObj[uid];
+    const div = document.createElement('div');
+    div.className='chat-item';
+    div.style.position = 'relative';
+    
+    // при клике открываем приватный чат
+    div.onclick = ()=> openPrivateChatWith(uid,p);
+
+    div.innerHTML=`
+      <div class="avatar"><img src="${p.avatar}" style="width:100%;height:100%"></div>
+      <div style="flex:1">
+        <div style="font-weight:600">${p.name}</div>
+        <div style="font-size:12px;color:var(--muted)">${p.premium? 'Premium+' : ''}</div>
+      </div>
+    `;
+
+    // кнопка удалить
+    const delBtn = document.createElement('div');
+    delBtn.textContent = '✕';
+    delBtn.style.position = 'absolute';
+    delBtn.style.right = '8px';
+    delBtn.style.top = '8px';
+    delBtn.style.cursor = 'pointer';
+    delBtn.style.color = '#ff5c5c';
+    delBtn.title = 'Удалить контакт';
+    delBtn.onclick = e=>{
+      e.stopPropagation(); // чтобы не открывался чат
+      if(confirm(`Удалить контакт ${p.name} и все его сообщения?`)){
+        deleteContact(uid);
+      }
+    };
+    div.appendChild(delBtn);
+
+    container.appendChild(div);
+  });
+}
+
+// ===== ФУНКЦИЯ УДАЛЕНИЯ =====
+function deleteContact(uid){
+  if(!useFirebase){
+    // удаляем из локального хранилища
+    const profiles = JSON.parse(localStorage.getItem('demo_profiles')||'{}');
+    delete profiles[uid];
+    localStorage.setItem('demo_profiles', JSON.stringify(profiles));
+
+    // удаляем личные сообщения
+    const allPrivate = JSON.parse(localStorage.getItem('demo_private')||'{}');
+    const roomId = uidKey(uid, me.uid);
+    delete allPrivate[roomId];
+    localStorage.setItem('demo_private', JSON.stringify(allPrivate));
+
+    // обновляем UI
+    loadChatList();
+    renderContacts(profiles);
+    if(currentChat.type==='private' && currentChat.id===roomId){
+      currentChat={type:'global', id:'global'};
+      openGlobal();
+    }
+  } else {
+    // Firebase
+    db.ref('profiles/'+uid).remove();
+    const roomId = uidKey(uid, me.uid);
+    db.ref('private/'+roomId).remove();
+  }
+}
+
+
+
+/* firebase listeners */
+function initFirebaseListeners(){
+  // profiles -> contacts
+  db.ref('profiles').on('value', snap=>{ const profiles = snap.val()||{}; renderContacts(profiles); loadChatList(); });
+  // global messages
+  db.ref('global/messages').on('child_added', snap=>{ const m=snap.val(); if(currentChat.type==='global'){ renderSingleMessage(m); markSeenForCurrent(); } else { const el = document.querySelector('[data-room="global"] .chat-item-unread'); if(el) el.style.display='inline-block'; } });
+  // private rooms: listen to rooms where I'm participant
+  db.ref('private').on('child_added', snap=>{ const roomId=snap.key; if(roomId.includes(me.uid)){ db.ref('private/'+roomId+'/messages').on('child_added', s=>{ const m=s.val(); if(currentChat.type==='private' && currentChat.id===roomId){ renderSingleMessage(m); markSeenForCurrent(); } else { const el = document.querySelector('[data-room="'+roomId+'"] .chat-item-unread'); if(el) el.style.display='inline-block'; } }); } });
+  // smart messages
+  db.ref('smart/messages').on('child_added', snap=>{ const m=snap.val(); if(currentChat.type==='smart'){ renderSingleMessage(m); markSeenForCurrent(); } else { const el = document.querySelector('[data-room="smart"] .chat-item-unread'); if(el) el.style.display='inline-block'; } });
+  // bots: simple listener is handled in previous file if bots exist
+}
+
+/* mark seen when opening chat */
+async function markSeenForCurrent(){
+  if(!me) return;
+  if(!useFirebase){
+    // local demo mark seen
+    if(currentChat.type==='global'){ const arr=JSON.parse(localStorage.getItem('demo_global')||'[]'); let changed=false; arr.forEach(m=>{ m.seen=m.seen||[]; if(!m.seen.includes(me.uid)){ m.seen.push(me.uid); changed=true; } }); if(changed) localStorage.setItem('demo_global', JSON.stringify(arr)); }
+    else if(currentChat.type==='smart'){ const arr=JSON.parse(localStorage.getItem('demo_smart')||'[]'); let changed=false; arr.forEach(m=>{ m.seen=m.seen||[]; if(!m.seen.includes(me.uid)){ m.seen.push(me.uid); changed=true; } }); if(changed) localStorage.setItem('demo_smart', JSON.stringify(arr)); }
+    else if(currentChat.type==='private'){ const all=JSON.parse(localStorage.getItem('demo_private')||'{}'); const arr=all[currentChat.id]||[]; let changed=false; arr.forEach(m=>{ m.seen=m.seen||[]; if(!m.seen.includes(me.uid)){ m.seen.push(me.uid); changed=true; } }); if(changed){ all[currentChat.id]=arr; localStorage.setItem('demo_private', JSON.stringify(all)); } }
+  } else {
+    // firebase: update seen arrays for messages under the current node
+    if(currentChat.type==='global'){ const snap = await db.ref('global/messages').once('value'); const vals = snap.val()||{}; for(const k of Object.keys(vals)){ const m=vals[k]; m.seen=m.seen||[]; if(!m.seen.includes(me.uid)){ m.seen.push(me.uid); await db.ref('global/messages/'+k+'/seen').set(m.seen); } } }
+    else if(currentChat.type==='smart'){ const snap = await db.ref('smart/messages').once('value'); const vals = snap.val()||{}; for(const k of Object.keys(vals)){ const m=vals[k]; m.seen=m.seen||[]; if(!m.seen.includes(me.uid)){ m.seen.push(me.uid); await db.ref('smart/messages/'+k+'/seen').set(m.seen); } } }
+    else if(currentChat.type==='private'){ const snap = await db.ref('private/'+currentChat.id+'/messages').once('value'); const vals = snap.val()||{}; for(const k of Object.keys(vals)){ const m=vals[k]; m.seen=m.seen||[]; if(!m.seen.includes(me.uid)){ m.seen.push(me.uid); await db.ref('private/'+currentChat.id+'/messages/'+k+'/seen').set(m.seen); } } }
+  }
+}
+
+/* ========== INITIAL UI: if Firebase not configured -> wait for demo start, else will open after auth ========== */
+if(!useFirebase){
+  // do nothing — user will click "Open demo"
+} else {
+  // if firebase configured but user not signed in, splash remains until auth state fires
+}
+
+/* allow Enter to send */
+document.addEventListener('keydown', e=>{ if(e.key==='Enter' && document.activeElement === $('messageInput')) $('sendBtn').click(); });
+
+/* ========== DONE ========= */
+// ===== RENDER CONTACTS С УДАЛЕНИЕМ =====
+function renderContacts(profilesObj){
+  const container = $('contactsList'); 
+  container.innerHTML=''; // очистка
+  if(!profilesObj) return;
+
+  Object.keys(profilesObj).forEach(uid=>{
+    if(uid===me.uid) return; 
+    const p = profilesObj[uid];
+    const div = document.createElement('div');
+    div.className='chat-item';
+    div.style.position = 'relative';
+    
+    // открытие приватного чата при клике
+    div.onclick = ()=> openPrivateChatWith(uid,p);
+
+    div.innerHTML=`
+      <div class="avatar"><img src="${p.avatar}" style="width:100%;height:100%"></div>
+      <div style="flex:1">
+        <div style="font-weight:600">${p.name}</div>
+        <div style="font-size:12px;color:var(--muted)">${p.premium? 'Premium+' : ''}</div>
+      </div>
+    `;
+
+    // кнопка удалить
+    const delBtn = document.createElement('div');
+    delBtn.textContent = '✕';
+    delBtn.style.position = 'absolute';
+    delBtn.style.right = '8px';
+    delBtn.style.top = '8px';
+    delBtn.style.cursor = 'pointer';
+    delBtn.style.color = '#ff5c5c';
+    delBtn.title = 'Удалить контакт';
+    delBtn.onclick = e=>{
+      e.stopPropagation(); // предотвращаем открытие чата
+      if(confirm(`Удалить контакт ${p.name} и все его сообщения?`)){
+        deleteContact(uid);
+      }
+    };
+    div.appendChild(delBtn);
+
+    container.appendChild(div);
+  });
+}
+
+// ===== ФУНКЦИЯ УДАЛЕНИЯ =====
+function deleteContact(uid){
+  if(!useFirebase){
+    // локально
+    const profiles = JSON.parse(localStorage.getItem('demo_profiles')||'{}');
+    delete profiles[uid];
+    localStorage.setItem('demo_profiles', JSON.stringify(profiles));
+
+    // удаляем личные сообщения
+    const allPrivate = JSON.parse(localStorage.getItem('demo_private')||'{}');
+    const roomId = uidKey(uid, me.uid);
+    delete allPrivate[roomId];
+    localStorage.setItem('demo_private', JSON.stringify(allPrivate));
+
+    // если чат открыт с этим пользователем, переключаем на глобальный
+    if(currentChat.type==='private' && currentChat.id===roomId){
+      currentChat={type:'global', id:'global'};
+      openGlobal();
+    }
+
+    // сразу обновляем UI
+    renderContacts(profiles);
+    loadChatList();
+  } else {
+    // Firebase
+    db.ref('profiles/'+uid).remove();
+    const roomId = uidKey(uid, me.uid);
+    db.ref('private/'+roomId).remove();
+
+    // если чат открыт с этим пользователем, переключаем на глобальный
+    if(currentChat.type==='private' && currentChat.id===roomId){
+      currentChat={type:'global', id:'global'};
+      openGlobal();
+    }
+  }
+}
+
+// сохранить аккаунт
+function saveAccount(){
+  if(!me) return;
+  localStorage.setItem('saved_account', JSON.stringify(me));
+}
+
+// восстановить аккаунт при загрузке
+(function restoreAccount(){
+  const saved = localStorage.getItem('saved_account');
+  if(saved){
+    try{
+      me = JSON.parse(saved);
+      if(me && me.uid){
+        showRoot();
+      }
+    }catch(e){
+      console.error('restore error', e);
+      localStorage.removeItem('saved_account');
+    }
+  }
+})();
+
+
+
+</script>
+
+</body>
+</html>
